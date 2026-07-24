@@ -1,7 +1,7 @@
 """
 Telegram Bot — long-polling mode.
-Listens to group messages, extracts tasks/decisions/blockers, stores in SQLite.
-Posts weekly digest via cron.
+Listens to group messages, extracts tasks/decisions/blockers via LLM,
+stores in SQLite. Posts weekly digest via cron.
 """
 import os
 import sys
@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).parent))
 
 from db import get_db
-from extract import extract_from_message, Task, Decision, Blocker
+from extract import extract_from_messages, Task, Decision, Blocker
 from digest import generate_digest, save_digest
 
 # Load env
@@ -55,9 +55,9 @@ async def cmd_help(message: types.Message):
         "/import-whatsapp — Import WhatsApp backup\n\n"
         "**In the group:**\n"
         "The bot passively observes messages and extracts:\n"
-        "• Tasks (e.g. 'Machst du X?')\n"
-        "• Decisions (e.g. 'Wir nehmen X')\n"
-        "• Blockers (e.g. 'Blockiert durch X')\n\n"
+        "• Tasks (action items, assignments)\n"
+        "• Decisions (choices, conclusions)\n"
+        "• Blockers (obstacles, problems)\n\n"
         "Just chat normally — no extra effort needed."
     )
 
@@ -162,11 +162,11 @@ async def cmd_import_whatsapp(message: types.Message):
         await message.answer("WhatsApp import not available. Install dependencies.")
 
 
-# --- Group message handler (passive observation) ---
+# --- Group message handler (passive observation via LLM) ---
 
 @dp.message()
 async def handle_message(message: types.Message):
-    """Handle incoming messages (group and DM)."""
+    """Handle incoming messages — store and extract via LLM."""
     # Skip bot's own messages
     if message.from_user and message.from_user.is_bot:
         return
@@ -188,48 +188,58 @@ async def handle_message(message: types.Message):
     finally:
         conn.close()
 
-    # Extract tasks, decisions, blockers
-    result = extract_from_message(
-        message.text or "",
-        user_name=user_name,
-        message_id=message.message_id,
-        chat_id=str(message.chat.id),
-    )
+    # Extract from batch of recent messages using LLM
+    conn = get_db()
+    try:
+        recent = conn.execute(
+            "SELECT message_id, user_name, text, chat_id FROM messages "
+            "WHERE chat_id = ? ORDER BY id DESC LIMIT 20",
+            (str(message.chat.id),)
+        ).fetchall()
 
-    # Store extracted data
-    if result.tasks or result.decisions or result.blockers:
-        conn = get_db()
-        try:
-            for task in result.tasks:
-                conn.execute(
-                    "INSERT INTO tasks (title, author, source_message_id, source_chat_id) VALUES (?, ?, ?, ?)",
-                    (task.title, task.author, task.source_message_id, task.source_chat_id)
-                )
+        # Convert to dict format for extract_from_messages
+        messages = []
+        for row in recent:
+            messages.append({
+                "message_id": row[0],
+                "user_name": row[1],
+                "text": row[2],
+                "chat_id": row[3],
+            })
 
-            for decision in result.decisions:
-                conn.execute(
-                    "INSERT INTO decisions (topic, decision, author, source_message_id, source_chat_id) VALUES (?, ?, ?, ?, ?)",
-                    (decision.topic, decision.decision, decision.author, decision.source_message_id, decision.source_chat_id)
-                )
+        results = extract_from_messages(messages)
 
-            for blocker in result.blockers:
-                conn.execute(
-                    "INSERT INTO blockers (title, reporter, source_message_id, source_chat_id) VALUES (?, ?, ?, ?)",
-                    (blocker.title, blocker.reporter, blocker.source_message_id, blocker.source_chat_id)
-                )
+        if results:
+            for result in results:
+                for task in result.tasks:
+                    conn.execute(
+                        "INSERT INTO tasks (title, author, source_message_id, source_chat_id) VALUES (?, ?, ?, ?)",
+                        (task.title, task.author, task.source_message_id, task.source_chat_id)
+                    )
 
-            conn.commit()
+                for decision in result.decisions:
+                    conn.execute(
+                        "INSERT INTO decisions (topic, decision, author, source_message_id, source_chat_id) VALUES (?, ?, ?, ?, ?)",
+                        (decision.topic, decision.decision, decision.author, decision.source_message_id, decision.source_chat_id)
+                    )
 
-            # Optional: notify in group if important extraction
-            if result.blockers:
-                await message.answer(
-                    f"🚧 Blocker erkannt: {result.blockers[0].title}\n"
-                    f"(@{result.blockers[0].reporter} hat dies gemeldet.)",
-                    parse_mode=ParseMode.MARKDOWN
-                )
+                for blocker in result.blockers:
+                    conn.execute(
+                        "INSERT INTO blockers (title, reporter, source_message_id, source_chat_id) VALUES (?, ?, ?, ?)",
+                        (blocker.title, blocker.reporter, blocker.source_message_id, blocker.source_chat_id)
+                    )
 
-        finally:
-            conn.close()
+                conn.commit()
+
+                # Notify in group on blockers
+                if result.blockers:
+                    await message.answer(
+                        f"🚧 Blocker erkannt: {result.blockers[0].title}\n"
+                        f"(@{result.blockers[0].reporter} hat dies gemeldet.)",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+    finally:
+        conn.close()
 
 
 async def on_startup(bot: Bot):

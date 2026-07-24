@@ -1,45 +1,15 @@
 """
-Extract tasks, decisions, and blockers from chat messages.
-Uses regex patterns first, falls back to LLM if configured.
+Extract tasks, decisions, and blockers from chat messages using an LLM.
 """
-import re
+import os
+import json
+import logging
 from dataclasses import dataclass, field
 from typing import Optional
 from pathlib import Path
+from openai import OpenAI, APIConnectionError, APIStatusError
 
-# Regex patterns for German/English task detection
-TASK_PATTERNS = [
-    # "Machst du X?" / "Machst die API-Dokumentation?"
-    re.compile(r"(?:machst\s+(?:dich\s+)?)?(\S.*(?:API|Dokumentation|Feature|Bug|Issue|Ticket|Task|Aufgabe))\??", re.IGNORECASE),
-    # "Kannst du X machen?"
-    re.compile(r"(?:kannst\s+(?:dich\s+)?)?(?:mache|mach)\s+(.+)", re.IGNORECASE),
-    # "Ich mache X"
-    re.compile(r"ich\s+(?:werde\s+)?(?:mache|mach)\s+(.+)", re.IGNORECASE),
-    # "Wir machen X"
-    re.compile(r"wir\s+machen\s+(.+)", re.IGNORECASE),
-    # TODO markers
-    re.compile(r"(?:todo|task|#task|ticket)\s*[:\-]?\s*(.+)", re.IGNORECASE),
-]
-
-# Decision patterns
-DECISION_PATTERNS = [
-    # "Wir nehmen X" / "Wir entscheiden uns für X"
-    re.compile(r"wir\s+(?:nehmen|entscheiden\s+uns?\s+für)\s+(.+)", re.IGNORECASE),
-    # "OK, X passt" / "X ist gut"
-    re.compile(r"(?:passt|gut|sinnvoll)\s*(?:,\s*)?(?:für\s+)?(.+)", re.IGNORECASE),
-    # "Entscheidung:" / "Decision:"
-    re.compile(r"(?:entscheidung|decision)\s*[:\-]?\s*(.+)", re.IGNORECASE),
-]
-
-# Blocker patterns
-BLOCKER_PATTERNS = [
-    # "Blockiert durch X" / "Hänge an X"
-    re.compile(r"(?:blockiert|hänge|hängst|steckst)\s+(?:durch|an|bei|in)\s+(.+)", re.IGNORECASE),
-    # "Problem mit X" / "Problem: X"
-    re.compile(r"problem\s+(?:mit|bei|an|in)\s+(.+)", re.IGNORECASE),
-    # "Blocker:" / "Blockiert:"
-    re.compile(r"(?:blocker|blockiert)\s*[:\-]?\s*(.+)", re.IGNORECASE),
-]
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -79,85 +49,114 @@ class ExtractionResult:
     blockers: list[Blocker] = field(default_factory=list)
 
 
-def extract_from_message(text: str, user_name: Optional[str] = None,
-                         message_id: Optional[int] = None,
-                         chat_id: Optional[str] = None) -> ExtractionResult:
-    """Extract tasks, decisions, and blockers from a single message."""
-    result = ExtractionResult()
-    text_clean = text.strip()
-
-    # Skip bot messages and short non-informative messages
-    if len(text_clean) < 3:
-        return result
-
-    # Check for tasks
-    for pattern in TASK_PATTERNS:
-        match = pattern.search(text_clean)
-        if match:
-            title = match.group(1).strip()
-            # Clean up common noise
-            title = re.sub(r'[^\w\s\-\#\.\,]+$', '', title).strip()
-            if title and len(title) > 2:
-                result.tasks.append(Task(
-                    title=title,
-                    author=user_name,
-                    source_message_id=message_id,
-                    source_chat_id=chat_id,
-                ))
-
-    # Check for decisions
-    for pattern in DECISION_PATTERNS:
-        match = pattern.search(text_clean)
-        if match:
-            text_after = match.group(1).strip() if match.lastindex else text_clean
-            # Try to extract topic + decision
-            if ":" in text_after:
-                parts = text_after.split(":", 1)
-                topic = parts[0].strip()
-                decision = parts[1].strip()
-            else:
-                topic = text_after[:50]
-                decision = text_after
-            result.decisions.append(Decision(
-                topic=topic,
-                decision=decision,
-                author=user_name,
-                source_message_id=message_id,
-                source_chat_id=chat_id,
-            ))
-
-    # Check for blockers
-    for pattern in BLOCKER_PATTERNS:
-        match = pattern.search(text_clean)
-        if match:
-            title = match.group(1).strip()
-            result.blockers.append(Blocker(
-                title=title,
-                reporter=user_name,
-                source_message_id=message_id,
-                source_chat_id=chat_id,
-            ))
-
-    return result
+def _get_llm_config():
+    """Get LLM configuration from environment."""
+    base_url = os.getenv("LLM_BASE_URL", "http://localhost:1234/v1")
+    model = os.getenv("LLM_MODEL")
+    if not model:
+        logger.warning("LLM_MODEL not set in .env — LLM extraction will be skipped.")
+    return base_url, model
 
 
 def extract_from_messages(messages: list[dict]) -> list[ExtractionResult]:
-    """Extract from a list of messages (dict with 'text', 'user_name', etc.)."""
-    return [extract_from_message(
-        msg.get("text", ""),
-        msg.get("user_name"),
-        msg.get("message_id"),
-        msg.get("chat_id"),
-    ) for msg in messages]
+    """Send a batch of messages to an LLM for structured extraction.
 
-
-# --- LLM fallback (optional, when regex is not enough) ---
-
-def extract_with_llm(messages: list[dict]) -> list[ExtractionResult]:
+    Expects each dict to have at least 'text' and optionally
+    'user_name', 'message_id', 'chat_id'.
+    Returns a list with one ExtractionResult containing all findings.
     """
-    Fallback: send messages to an LLM for extraction.
-    Returns structured extraction results.
-    """
-    # This would call your LLM endpoint
-    # For now, return regex results as fallback
-    return extract_from_messages(messages)
+    if not messages:
+        return []
+
+    # Build readable text for the LLM
+    text_parts = []
+    for msg in messages:
+        name = msg.get("user_name", "unknown")
+        text = msg.get("text", "")
+        if text.strip():
+            text_parts.append(f"[{name}]: {text}")
+
+    if not text_parts:
+        return []
+
+    prompt = (
+        "You are a project coordination assistant that extracts action items, "
+        "decisions, and blockers from chat messages.\n\n"
+        "Analyze the following messages and extract:\n\n"
+        "**Tasks (Aufgaben):** Any action items, assignments, commitments, or "
+        "things someone said they would do. Include who is responsible if "
+        "mentioned.\n\n"
+        "**Decisions (Entscheidungen):** Any decisions made, choices agreed upon, "
+        "or conclusions reached. Include the reasoning if clear.\n\n"
+        "**Blockers (Blockaden):** Any obstacles, problems, or things blocking "
+        "progress. Include who reported it.\n\n"
+        "Respond with ONLY a JSON object in this exact format (no explanation, "
+        "no markdown):\n"
+        "{\n"
+        '  "tasks": [{"title": "...", "author": "name or null", "notes": "... or null"}],\n'
+        '  "decisions": [{"topic": "...", "decision": "...", "rationale": "... or null", "author": "name or null"}],\n'
+        '  "blockers": [{"title": "...", "reporter": "name or null"}]\n'
+        "}\n\n"
+        "Messages to analyze:\n"
+        + "\n".join(text_parts)
+    )
+
+    try:
+        base_url, model = _get_llm_config()
+        client = OpenAI(base_url=base_url)
+
+        response = client.chat.completions.create(
+            model=model or "gpt-4",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+            response_format={"type": "json_object"},
+        )
+
+        content = response.choices[0].message.content
+        if not content:
+            logger.warning("LLM returned empty response.")
+            return []
+        result_json = json.loads(content)
+
+        # Map to our dataclasses
+        er = ExtractionResult()
+        last_msg = messages[-1] if messages else {}
+
+        for t in result_json.get("tasks", []):
+            er.tasks.append(Task(
+                title=t["title"],
+                author=t.get("author"),
+                notes=t.get("notes"),
+                source_message_id=last_msg.get("message_id"),
+                source_chat_id=last_msg.get("chat_id"),
+            ))
+
+        for d in result_json.get("decisions", []):
+            er.decisions.append(Decision(
+                topic=d["topic"],
+                decision=d["decision"],
+                rationale=d.get("rationale"),
+                author=d.get("author"),
+                source_message_id=last_msg.get("message_id"),
+                source_chat_id=last_msg.get("chat_id"),
+            ))
+
+        for b in result_json.get("blockers", []):
+            er.blockers.append(Blocker(
+                title=b["title"],
+                reporter=b.get("reporter"),
+                source_message_id=last_msg.get("message_id"),
+                source_chat_id=last_msg.get("chat_id"),
+            ))
+
+        return [er]
+
+    except (APIConnectionError, APIStatusError) as e:
+        logger.error(f"LLM connection failed — is the server running? {e}")
+        return []
+    except json.JSONDecodeError as e:
+        logger.error(f"LLM returned invalid JSON: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Unexpected error during LLM extraction: {e}")
+        return []
