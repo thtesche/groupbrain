@@ -55,8 +55,25 @@ async def read_messages(limit: int = 100, offset: int = 0) -> list[dict]:
             }
             
             # Reply-Information falls vorhanden
-            if message.reply_to and hasattr(message.reply_to, 'reply_to_msg_id'):
+            if message.is_reply and message.reply_to:
                 parsed["reply_to_id"] = message.reply_to.reply_to_msg_id
+            
+            # Forward-Informationen
+            if message.forward:
+                parsed["forwarded"] = True
+                if hasattr(message.forward, 'sender_user_id'):
+                    parsed["forward_from"] = message.forward.sender_user_id
+                elif hasattr(message.forward, 'from_id'):
+                    parsed["forward_from"] = message.forward.from_id
+            
+            # Medien (Fotos, Dokumente)
+            if message.file:
+                parsed["has_media"] = True
+                parsed["media_type"] = type(message.file).__name__
+            
+            # Interaktive Buttons
+            if message.buttons:
+                parsed["button_count"] = message.button_count
             
             messages.append(parsed)
         
@@ -86,8 +103,23 @@ def print_messages(messages: list[dict]) -> None:
         for i in range(0, len(text), 100):
             print(f"    {text[i:i+100]}")
         
+        # Reply-Information
         if "reply_to_id" in msg:
             print(f"    → Reply zu Nachricht {msg['reply_to_id']}")
+        
+        # Forward-Information
+        if msg.get("forwarded"):
+            forward_from = msg.get("forward_from")
+            print(f"    → Forwarded (from: {forward_from})")
+        
+        # Medien-Information
+        if msg.get("has_media"):
+            media_type = msg.get("media_type", "unknown")
+            print(f"    → Media: {media_type}")
+        
+        # Button-Information
+        if "button_count" in msg:
+            print(f"    → Buttons: {msg['button_count']}")
         
         print()
     
