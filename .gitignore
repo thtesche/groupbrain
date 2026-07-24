@@ -1,6 +1,2 @@
-.env
-__pycache__/
-*.pyc
-*.db
-data/
-*.log
+# Session files from Telethon (never commit)
+*_session.session
