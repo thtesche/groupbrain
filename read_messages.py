@@ -54,12 +54,24 @@ async def read_messages(limit: int = 100, offset: int = 0) -> list[dict]:
                 "text": message.text or "[keine Textnachricht]",
             }
             
-            # Reply-Information (nur echte Telegram-Replies, keine Zitate)
+            # Reply- und Thread-Information (nur echte Telegram-Replies, keine Zitate)
             # message.is_reply kann True sein für Zitate - wir prüfen den Typ
             if message.is_reply and message.reply_to:
                 reply_type = type(message.reply_to).__name__
-                if reply_type == 'ReplyToMessage':
-                    parsed["reply_to_id"] = message.reply_to.reply_to_msg_id
+                # ReplyToMessage für normale Gruppen, MessageReplyHeader für Forum-Topics
+                if reply_type in ('ReplyToMessage', 'MessageReplyHeader'):
+                    reply_to_msg_id = message.reply_to.reply_to_msg_id
+                    
+                    # Thread-ID: reply_to_top_id ist die Root-Nachricht (Thread-Start)
+                    # Falls None (direkte Antwort auf Root), ist reply_to_msg_id selbst die Thread-ID
+                    top_id = getattr(message.reply_to, 'reply_to_top_id', None)
+                    parsed["thread_id"] = top_id if top_id is not None else reply_to_msg_id
+                    
+                    # Forum-Topic: Boolean, ob es ein echtes Topic in einer Supergruppe ist
+                    parsed["is_forum_topic"] = getattr(message.reply_to, 'forum_topic', False)
+                    
+                    # Direkte Antwort-ID (für verschachtelte Zitate innerhalb des Threads)
+                    parsed["reply_to_id"] = reply_to_msg_id
             
             # Forward-Informationen
             if message.forward:
@@ -111,6 +123,11 @@ def print_messages(messages: list[dict]) -> None:
         if "reply_to_id" in msg:
             print(f"    → Reply zu Nachricht {msg['reply_to_id']}")
         
+        # Thread-Information
+        if "thread_id" in msg:
+            ft = "Forum-Topic" if msg.get("is_forum_topic") else "normaler Thread"
+            print(f"    → Thread-ID: {msg['thread_id']} ({ft})")
+        
         # Forward-Information
         if msg.get("forwarded"):
             forward_from = msg.get("forward_from")
@@ -127,7 +144,22 @@ def print_messages(messages: list[dict]) -> None:
         
         print()
     
-    print(f"{'='*70}")
+    # Thread-Zusammenfassung
+    thread_summary = {}
+    for msg in messages:
+        tid = msg.get("thread_id")
+        if tid is not None:
+            if tid not in thread_summary:
+                thread_summary[tid] = {"count": 0, "is_forum_topic": msg.get("is_forum_topic", False)}
+            thread_summary[tid]["count"] += 1
+    
+    if thread_summary:
+        print(f"\n  Thread-Zusammenfassung:")
+        for tid, info in thread_summary.items():
+            ft = "Forum-Topic" if info["is_forum_topic"] else "normaler Thread"
+            print(f"    Thread {tid}: {info['count']} Nachrichten ({ft})")
+    
+    print(f"\n{'='*70}")
     print(f"  Gesamt: {len(messages)} Nachrichten")
     print(f"{'='*70}\n")
 
