@@ -48,15 +48,18 @@ async def read_messages(limit: int = 100, offset: int = 0) -> list[dict]:
             reverse=True  # Älteste zuerst
         ):
             parsed = {
-                "id": message.id,
+                "message_id": message.id,
                 "date": message.date.isoformat(),
                 "sender_id": message.sender_id,
                 "text": message.text or "[keine Textnachricht]",
             }
             
-            # Reply-Information falls vorhanden
+            # Reply-Information (nur echte Telegram-Replies, keine Zitate)
+            # message.is_reply kann True sein für Zitate - wir prüfen den Typ
             if message.is_reply and message.reply_to:
-                parsed["reply_to_id"] = message.reply_to.reply_to_msg_id
+                reply_type = type(message.reply_to).__name__
+                if reply_type == 'ReplyToMessage':
+                    parsed["reply_to_id"] = message.reply_to.reply_to_msg_id
             
             # Forward-Informationen
             if message.forward:
@@ -94,10 +97,11 @@ def print_messages(messages: list[dict]) -> None:
     
     for msg in messages:
         date = msg["date"]
+        message_id = msg["message_id"]
         sender_id = msg["sender_id"]
         text = msg["text"]
         
-        print(f"  [{date}]  ID: {sender_id}")
+        print(f"  [{date}]  message_id: {message_id}  Sender_ID: {sender_id}")
         
         # Wrap long text
         for i in range(0, len(text), 100):
