@@ -29,7 +29,7 @@ def _init_tables(conn: sqlite3.Connection) -> None:
             message_id INTEGER NOT NULL,
             user_id TEXT,
             user_name TEXT,
-            source TEXT DEFAULT 'telegram',  -- telegram | whatsapp
+            source TEXT DEFAULT 'telegram',
             text TEXT NOT NULL,
             is_bot_reply INTEGER DEFAULT 0,
             UNIQUE(chat_id, message_id, source)
@@ -46,7 +46,7 @@ def _init_tables(conn: sqlite3.Connection) -> None:
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             notes TEXT,
-            FOREIGN KEY (source_message_id) REFERENCES messages(id)
+            FOREIGN KEY (source_message_id) REFERENCES messages
         );
 
         CREATE TABLE IF NOT EXISTS decisions (

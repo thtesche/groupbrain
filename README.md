@@ -6,7 +6,7 @@ Passive knowledge extraction from Telegram group chats. No manual documentation 
 ## Architecture
 ```
 Telegram Group ←── Bot (Long-Polling)
-                    ├── extract.py  (Pattern + LLM)
+                    ├── extract.py  (LLM)
                     ├── db.py       (SQLite Storage)
                     └── digest.py   (Weekly Digest)
 ```
@@ -25,7 +25,6 @@ python bot.py
 - **Decision Logging**: Captures team decisions with context
 - **Blocker Tracking**: Identifies blocked items
 - **Weekly Digest**: Auto-generates and posts summary
-- **WhatsApp Import**: Parses chat backups as secondary source
 
 ## Configuration
 Set env vars in `.env`:
@@ -35,10 +34,9 @@ Set env vars in `.env`:
 
 ## Files
 - `bot.py` — Telegram bot (long-polling, message handler)
-- `extract.py` — Task/Decision/Blocker extraction (regex + LLM)
+- `extract.py` — Task/Decision/Blocker extraction (LLM)
 - `db.py` — SQLite storage (tasks, decisions, blockers, messages, digests)
 - `digest.py` — Weekly digest generator
-- `whatsapp.py` — WhatsApp chat backup parser
 - `requirements.txt` — Python dependencies
 
 ## Integration with Hermes

@@ -51,8 +51,7 @@ async def cmd_help(message: types.Message):
         "/decisions — Show all decisions\n"
         "/blockers — Show active blockers\n"
         "/digest — Generate and send weekly digest\n"
-        "/status — Show bot status\n"
-        "/import-whatsapp — Import WhatsApp backup\n\n"
+        "/status — Show bot status\n\n"
         "**In the group:**\n"
         "The bot passively observes messages and extracts:\n"
         "• Tasks (action items, assignments)\n"
@@ -149,17 +148,6 @@ async def cmd_status(message: types.Message):
         f"📅 Started: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
     )
     await message.answer(status, parse_mode=ParseMode.MARKDOWN)
-
-
-@dp.message(Command("import-whatsapp"))
-async def cmd_import_whatsapp(message: types.Message):
-    """Import WhatsApp backup."""
-    try:
-        from whatsapp import import_all
-        count = import_all()
-        await message.answer(f"✅ {count} WhatsApp messages imported.")
-    except ImportError:
-        await message.answer("WhatsApp import not available. Install dependencies.")
 
 
 # --- Group message handler (passive observation via LLM) ---
@@ -264,7 +252,6 @@ def main():
     dp.message.register(cmd_blockers, Command("blockers"))
     dp.message.register(cmd_digest, Command("digest"))
     dp.message.register(cmd_status, Command("status"))
-    dp.message.register(cmd_import_whatsapp, Command("import-whatsapp"))
 
     # Main message handler (passive observation)
     dp.message.register(handle_message)
