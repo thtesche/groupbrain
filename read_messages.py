@@ -23,8 +23,12 @@ if not all([API_ID, API_HASH, GROUP_CHAT_ID]):
     sys.exit(1)
 
 
-async def read_messages(limit: int = 100, offset: int = 0) -> list[dict]:
-    """Fetch messages from Telegram group via Telethon."""
+async def read_messages(limit: int = 100, offset: int = 0) -> tuple[list[dict], dict[str, str]]:
+    """Fetch messages from Telegram group via Telethon.
+    
+    Returns:
+        Tuple of (messages, username_map) where username_map maps sender_id -> "first_name @username".
+    """
     # Erstelle den Client als normaler Telegram-Nutzer (nicht Bot)
     client = TelegramClient('groupbrain_session', int(API_ID or "0"), API_HASH or "")
     
@@ -40,6 +44,9 @@ async def read_messages(limit: int = 100, offset: int = 0) -> list[dict]:
         chat_id = int(GROUP_CHAT_ID or "0")
         
         messages = []
+        # sender_id (str) -> "first_name @username" (oder nur first_name)
+        username_map: dict[str, str] = {}
+        
         async for message in client.iter_messages(
             chat_id,
             limit=limit,
@@ -53,6 +60,60 @@ async def read_messages(limit: int = 100, offset: int = 0) -> list[dict]:
                 "sender_id": message.sender_id,
                 "text": message.text or "[keine Textnachricht]",
             }
+            
+            # Username aus sender extrahieren und im Map speichern
+            if message.sender_id is not None:
+                sid = str(message.sender_id)
+                if sid not in username_map:
+                    # message.sender ist PeerUser -> User mit username/first_name
+                    if hasattr(message, 'sender') and message.sender is not None:
+                        try:
+                            user = await client.get_entity(message.sender)
+                            # nur User-Peers haben first_name/username (nicht Chat/Channel)
+                            from telethon.tl.types import User
+                            if isinstance(user, User):
+                                parts = []
+                                if user.first_name:
+                                    parts.append(user.first_name)
+                                if user.username:
+                                    parts.append(f"@{user.username}")
+                                username_map[sid] = " ".join(parts) if parts else sid
+                            else:
+                                username_map[sid] = sid
+                        except Exception:
+                            username_map[sid] = sid
+                    else:
+                        username_map[sid] = sid
+            
+            # Reactions extrahieren
+            if hasattr(message, 'reactions') and message.reactions is not None:
+                reaction_labels = []
+                if hasattr(message.reactions, 'results'):
+                    for result in message.reactions.results:
+                        emoji_str = None
+                        count = getattr(result, 'count', None)
+                        
+                        # ReactionCount hat .reaction (ReactionEmoji oder ReactionCustomEmoji)
+                        if hasattr(result, 'reaction'):
+                            r = result.reaction
+                            # ReactionEmoji: hat .emoticon (String)
+                            if hasattr(r, 'emoticon') and r.emoticon:
+                                emoji_str = r.emoticon
+                            # ReactionCustomEmoji: hat .document (Document mit attributes)
+                            elif hasattr(r, 'document') and r.document is not None:
+                                emoji_str = f"[custom_emoji:{hex(r.document.id)}]"
+                        
+                        # ReactionCustomEmoji direkt auf Result (alte Struktur?)
+                        elif hasattr(result, 'document') and result.document is not None:
+                            emoji_str = f"[custom_emoji:{hex(result.document.id)}]"
+                        
+                        if emoji_str:
+                            if count is not None and count > 1:
+                                reaction_labels.append(f"{emoji_str}×{count}")
+                            else:
+                                reaction_labels.append(emoji_str)
+                if reaction_labels:
+                    parsed["reactions"] = reaction_labels
             
             # Reply- und Thread-Information (nur echte Telegram-Replies, keine Zitate)
             # message.is_reply kann True sein für Zitate - wir prüfen den Typ
@@ -92,13 +153,21 @@ async def read_messages(limit: int = 100, offset: int = 0) -> list[dict]:
             
             messages.append(parsed)
         
-        return messages
+        return messages, username_map
     finally:
         await client.disconnect()
 
 
-def print_messages(messages: list[dict]) -> None:
-    """Print messages in a readable console format."""
+def print_messages(messages: list[dict], username_map: dict[str, str] | None = None) -> None:
+    """Print messages in a readable console format.
+    
+    Args:
+        messages: List of message dicts.
+        username_map: Optional mapping of sender_id -> display name.
+    """
+    if username_map is None:
+        username_map = {}
+    
     if not messages:
         print("Keine Nachrichten gefunden.")
         return
@@ -113,11 +182,24 @@ def print_messages(messages: list[dict]) -> None:
         sender_id = msg["sender_id"]
         text = msg["text"]
         
-        print(f"  [{date}]  message_id: {message_id}  Sender_ID: {sender_id}")
+        # Username aus Map auflösen
+        if sender_id is not None:
+            sid_str = str(sender_id)
+            display = username_map.get(sid_str, sid_str)
+        else:
+            display = "unbekannt"
+        
+        print(f"  [{date}]  message_id: {message_id}  Sender: {display}")
         
         # Wrap long text
         for i in range(0, len(text), 100):
             print(f"    {text[i:i+100]}")
+        
+        # Reactions
+        reactions = msg.get("reactions")
+        if reactions:
+            reaction_str = ", ".join(reactions)
+            print(f"    → Reactions: [{reaction_str}]")
         
         # Reply-Information
         if "reply_to_id" in msg:
@@ -143,6 +225,12 @@ def print_messages(messages: list[dict]) -> None:
             print(f"    → Buttons: {msg['button_count']}")
         
         print()
+    
+    # Username-Zusammenfassung
+    if username_map:
+        print(f"\n  Username-Zusammenfassung:")
+        for sid, name in sorted(username_map.items(), key=lambda x: x[1]):
+            print(f"    {sid} → {name}")
     
     # Thread-Zusammenfassung
     thread_summary = {}
@@ -173,8 +261,8 @@ async def main():
     print(f"📩 Lese Nachrichten aus Gruppe: {GROUP_CHAT_ID}")
     print(f"   Limit: {args.limit}, Offset: {args.offset}\n")
     
-    messages = await read_messages(limit=args.limit, offset=args.offset)
-    print_messages(messages)
+    messages, username_map = await read_messages(limit=args.limit, offset=args.offset)
+    print_messages(messages, username_map)
 
 
 if __name__ == "__main__":
