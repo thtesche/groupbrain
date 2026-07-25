@@ -1,2 +1,12 @@
 # Session files from Telethon (never commit)
 *_session.session
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+
+# Environment variables
+.env
