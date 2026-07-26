@@ -5,11 +5,26 @@ Passive knowledge extraction from Telegram group chats. Uses Telethon to fetch r
 
 ## Architecture
 ```
-Telegram Group ←── read_messages.py (Telethon)
-                    ├── fetch_messages.py (SQLite storage)
-                    ├── extract_messages.py (LLM extraction)
-                    ├── show_db.py (SQLite Viewer)
-                    └── generate_digest_cli.py (Weekly Digest)
+Telegram Group ←── read_messages.py (Telethon user client)
+                    │   └── TelegramAuthUser (Auth, Session file creation)
+                    │
+                    ├── fetch_messages.py (CLI: calls read_messages, stores in SQLite)
+                    │
+                    ├── extract.py (Core module: LLM extraction via OpenAI-compatible API)
+                    ├── extract_messages.py (CLI: reads from SQLite, calls LLM, stores results)
+                    │
+                    ├── digest.py (Core module: digest generation from SQLite)
+                    ├── generate_digest_cli.py (CLI: displays digest)
+                    │
+                    ├── show_db.py (SQLite Viewer: messages, tasks, decisions, blockers, digests)
+                    └── db.py (SQLite Schema: messages, tasks, decisions, blockers, digests, users, FTS5)
+
+Layers:
+  Telethon layer:   read_messages.py (Telegram API, User-Client, no Bot API)
+  Core modules:     extract.py (LLM extraction, dataclasses), digest.py (digest generation)
+  CLI wrappers:     fetch_messages.py, extract_messages.py, generate_digest_cli.py, show_db.py
+  Storage:          db.py (SQLite schema + migrations)
+  Orchestrator:     groupbrain.py (usage instructions)
 ```
 
 ## Quick Start
@@ -47,16 +62,21 @@ Set env vars in `.env`:
 - `OPENAI_API_KEY` — API key (use "dummy" for local servers)
 - `DB_PATH` — SQLite database path (default: `~/.hermes/data/groupbrain.db`)
 
-## Files
-- `read_messages.py` — Fetch messages from Telegram via Telethon (with metadata)
-- `fetch_messages.py` — Store messages in SQLite (with metadata)
-- `extract_messages.py` — Extract tasks/decisions/blockers via LLM
-- `show_db.py` — View database content (with metadata annotations)
-- `generate_digest_cli.py` — Generate weekly recap
-- `telegram_auth_user.py` — One-time Telegram authentication (optional)
-- `extract.py` — Core LLM extraction logic
-- `db.py` — SQLite storage (tasks, decisions, blockers, messages, digests)
-- `digest.py` — Weekly digest generator
+## Files (Core Modules)
+- `read_messages.py` — Telethon user client: fetches messages with full metadata (reactions, threads, replies, forwards, media)
+- `extract.py` — Core LLM extraction: sends message batches to OpenAI-compatible API, returns Task/Decision/Blocker dataclasses
+- `digest.py` — Core digest generator: assembles weekly recap from tasks, decisions, blockers in SQLite
+
+## Files (CLI Wrappers)
+- `fetch_messages.py` — CLI: calls `read_messages.py`, stores messages + username mapping in SQLite
+- `extract_messages.py` — CLI: reads messages from SQLite, calls `extract.py` (LLM), stores Tasks/Decisions/Blockers
+- `generate_digest_cli.py` — CLI: calls `digest.py`, displays weekly recap
+- `show_db.py` — CLI: SQLite Viewer (all tables: messages, tasks, decisions, blockers, digests)
+
+## Files (Auth & Infra)
+- `telegram_auth_user.py` — One-time Telegram authentication via Telethon (creates `groupbrain_session.session`)
+- `groupbrain.py` — Orchestration: displays usage instructions for all CLI tools
+- `db.py` — SQLite schema: messages, tasks, decisions, blockers, digests, users, FTS5 full-text search, schema migrations
 - `requirements.txt` — Python dependencies
 
 ## Integration with Hermes
