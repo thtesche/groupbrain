@@ -32,6 +32,7 @@ def _init_tables(conn: sqlite3.Connection) -> None:
             source TEXT DEFAULT 'telegram',
             text TEXT NOT NULL,
             is_bot_reply INTEGER DEFAULT 0,
+            metadata TEXT,  -- JSON: reactions, thread_id, reply_to_id, forwarded, media, buttons
             UNIQUE(chat_id, message_id, source)
         );
 
@@ -97,4 +98,17 @@ def _init_tables(conn: sqlite3.Connection) -> None:
             VALUES ('delete', old.id, old.text, old.user_name, old.source, old.chat_id);
         END;
     """)
+    conn.commit()
+    
+    # --- Schema migrations ---
+    _migrate_schema(conn)
+
+
+def _migrate_schema(conn: sqlite3.Connection) -> None:
+    """Add missing columns to existing tables (schema migrations)."""
+    # Check if messages table has metadata column
+    columns = [col[1] for col in conn.execute("PRAGMA table_info(messages)").fetchall()]
+    if "metadata" not in columns:
+        conn.execute("ALTER TABLE messages ADD COLUMN metadata TEXT")
+        print("  🔄 Added 'metadata' column to messages table")
     conn.commit()

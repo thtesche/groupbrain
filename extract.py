@@ -8,8 +8,12 @@ from dataclasses import dataclass, field
 from typing import Optional
 from pathlib import Path
 from openai import OpenAI, APIConnectionError, APIStatusError
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
+
+# Load .env from project root (same directory as this module)
+load_dotenv(Path(__file__).parent / ".env")
 
 
 @dataclass
@@ -68,13 +72,38 @@ def extract_from_messages(messages: list[dict]) -> list[ExtractionResult]:
     if not messages:
         return []
 
-    # Build readable text for the LLM
+    # Build readable text for the LLM, including metadata
     text_parts = []
     for msg in messages:
         name = msg.get("user_name", "unknown")
         text = msg.get("text", "")
+        metadata = msg.get("metadata") or {}
+        
+        # Build message line with metadata
+        line = f"[{name}]: {text}"
+        
+        # Add metadata annotations
+        annotations = []
+        if metadata.get("reactions"):
+            reaction_str = ", ".join(metadata["reactions"])
+            annotations.append(f"reactions=[{reaction_str}]")
+        if metadata.get("reply_to_id"):
+            annotations.append(f"reply_to={metadata['reply_to_id']}")
+        if metadata.get("thread_id"):
+            ft = "forum-topic" if metadata.get("is_forum_topic") else "thread"
+            annotations.append(f"thread={metadata['thread_id']} ({ft})")
+        if metadata.get("forwarded"):
+            annotations.append("forwarded")
+        if metadata.get("has_media"):
+            annotations.append(f"media={metadata.get('media_type', 'media')}")
+        if metadata.get("button_count"):
+            annotations.append(f"buttons={metadata['button_count']}")
+        
+        if annotations:
+            line += " " + " ".join(annotations)
+        
         if text.strip():
-            text_parts.append(f"[{name}]: {text}")
+            text_parts.append(line)
 
     if not text_parts:
         return []
@@ -103,20 +132,37 @@ def extract_from_messages(messages: list[dict]) -> list[ExtractionResult]:
 
     try:
         base_url, model = _get_llm_config()
-        client = OpenAI(base_url=base_url)
+        # Lokale Server (LM Studio, Ollama etc.) brauchen trotzdem einen api_key
+        api_key = os.getenv("OPENAI_API_KEY") or "dummy"
+        client = OpenAI(base_url=base_url, api_key=api_key)
 
         response = client.chat.completions.create(
             model=model or "gpt-4",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
-            response_format={"type": "json_object"},
         )
 
-        content = response.choices[0].message.content
-        if not content:
+        raw = response.choices[0].message.content
+        if not raw:
             logger.warning("LLM returned empty response.")
             return []
-        result_json = json.loads(content)
+
+        # Extract JSON from possible markdown code blocks
+        json_str = raw.strip()
+        if json_str.startswith("```"):
+            # Remove markdown code fences
+            lines = json_str.split("\n")
+            json_lines = []
+            in_block = False
+            for line in lines:
+                if line.startswith("```"):
+                    in_block = not in_block
+                    continue
+                if in_block or not line.startswith("```"):
+                    json_lines.append(line)
+            json_str = "\n".join(json_lines).strip()
+
+        result_json = json.loads(json_str)
 
         # Map to our dataclasses
         er = ExtractionResult()
