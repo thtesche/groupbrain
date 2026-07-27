@@ -47,6 +47,7 @@ def _init_tables(conn: sqlite3.Connection) -> None:
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             notes TEXT,
+            metadata TEXT,  -- JSON: reactions, reply_to_id, thread_id, forwarded, media, buttons
             FOREIGN KEY (source_message_id) REFERENCES messages
         );
 
@@ -59,7 +60,8 @@ def _init_tables(conn: sqlite3.Connection) -> None:
             source_message_id INTEGER,
             source_chat_id TEXT,
             source TEXT DEFAULT 'telegram',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            metadata TEXT  -- JSON: reactions, reply_to_id, thread_id, forwarded, media, buttons
         );
 
         CREATE TABLE IF NOT EXISTS blockers (
@@ -71,7 +73,8 @@ def _init_tables(conn: sqlite3.Connection) -> None:
             source_chat_id TEXT,
             source TEXT DEFAULT 'telegram',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            resolved_at DATETIME
+            resolved_at DATETIME,
+            metadata TEXT  -- JSON: reactions, reply_to_id, thread_id, forwarded, media, buttons
         );
 
         CREATE TABLE IF NOT EXISTS digests (
@@ -111,4 +114,23 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
     if "metadata" not in columns:
         conn.execute("ALTER TABLE messages ADD COLUMN metadata TEXT")
         print("  🔄 Added 'metadata' column to messages table")
+
+    # Check tasks table for metadata column
+    columns = [col[1] for col in conn.execute("PRAGMA table_info(tasks)").fetchall()]
+    if "metadata" not in columns:
+        conn.execute("ALTER TABLE tasks ADD COLUMN metadata TEXT")
+        print("  🔄 Added 'metadata' column to tasks table")
+
+    # Check decisions table for metadata column
+    columns = [col[1] for col in conn.execute("PRAGMA table_info(decisions)").fetchall()]
+    if "metadata" not in columns:
+        conn.execute("ALTER TABLE decisions ADD COLUMN metadata TEXT")
+        print("  🔄 Added 'metadata' column to decisions table")
+
+    # Check blockers table for metadata column
+    columns = [col[1] for col in conn.execute("PRAGMA table_info(blockers)").fetchall()]
+    if "metadata" not in columns:
+        conn.execute("ALTER TABLE blockers ADD COLUMN metadata TEXT")
+        print("  🔄 Added 'metadata' column to blockers table")
+
     conn.commit()
