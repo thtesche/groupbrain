@@ -98,24 +98,21 @@ def extract_from_db(limit: int = 20) -> None:
     conn = get_db()
     try:
         for task in result.tasks:
-            meta_json = json.dumps(msg_dict.get("metadata")) if msg_dict.get("metadata") else None
             conn.execute(
                 "INSERT INTO tasks (title, author, source_message_id, source_chat_id, notes, metadata) VALUES (?, ?, ?, ?, ?, ?)",
-                (task.title, task.author, task.source_message_id, task.source_chat_id, task.notes, meta_json),
+                (task.title, task.author, task.source_message_id, task.source_chat_id, task.notes, task.metadata),
             )
 
         for decision in result.decisions:
-            meta_json = json.dumps(msg_dict.get("metadata")) if msg_dict.get("metadata") else None
             conn.execute(
                 "INSERT INTO decisions (topic, decision, author, source_message_id, source_chat_id, rationale, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (decision.topic, decision.decision, decision.author, decision.source_message_id, decision.source_chat_id, decision.rationale, meta_json),
+                (decision.topic, decision.decision, decision.author, decision.source_message_id, decision.source_chat_id, decision.rationale, decision.metadata),
             )
 
         for blocker in result.blockers:
-            meta_json = json.dumps(msg_dict.get("metadata")) if msg_dict.get("metadata") else None
             conn.execute(
                 "INSERT INTO blockers (title, reporter, source_message_id, source_chat_id, metadata) VALUES (?, ?, ?, ?, ?)",
-                (blocker.title, blocker.reporter, blocker.source_message_id, blocker.source_chat_id, meta_json),
+                (blocker.title, blocker.reporter, blocker.source_message_id, blocker.source_chat_id, blocker.metadata),
             )
 
         conn.commit()

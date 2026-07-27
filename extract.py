@@ -24,6 +24,7 @@ class Task:
     source_chat_id: Optional[str] = None
     source: str = "telegram"
     notes: Optional[str] = None
+    metadata: Optional[str] = None
 
 
 @dataclass
@@ -35,6 +36,7 @@ class Decision:
     source_message_id: Optional[int] = None
     source_chat_id: Optional[str] = None
     source: str = "telegram"
+    metadata: Optional[str] = None
 
 
 @dataclass
@@ -44,6 +46,7 @@ class Blocker:
     source_message_id: Optional[int] = None
     source_chat_id: Optional[str] = None
     source: str = "telegram"
+    metadata: Optional[str] = None
 
 
 @dataclass
@@ -74,6 +77,7 @@ def extract_from_messages(messages: list[dict]) -> list[ExtractionResult]:
 
     # Build readable text for the LLM, including metadata
     text_parts = []
+    metadata_list = []
     for msg in messages:
         name = msg.get("user_name", "unknown")
         text = msg.get("text", "")
@@ -104,6 +108,8 @@ def extract_from_messages(messages: list[dict]) -> list[ExtractionResult]:
         
         if text.strip():
             text_parts.append(line)
+        
+        metadata_list.append(json.dumps(metadata) if metadata else None)
 
     if not text_parts:
         return []
@@ -175,6 +181,7 @@ def extract_from_messages(messages: list[dict]) -> list[ExtractionResult]:
                 notes=t.get("notes"),
                 source_message_id=last_msg.get("message_id"),
                 source_chat_id=last_msg.get("chat_id"),
+                metadata=metadata_list[-1] if metadata_list else None,
             ))
 
         for d in result_json.get("decisions", []):
@@ -185,6 +192,7 @@ def extract_from_messages(messages: list[dict]) -> list[ExtractionResult]:
                 author=d.get("author"),
                 source_message_id=last_msg.get("message_id"),
                 source_chat_id=last_msg.get("chat_id"),
+                metadata=metadata_list[-1] if metadata_list else None,
             ))
 
         for b in result_json.get("blockers", []):
@@ -193,6 +201,7 @@ def extract_from_messages(messages: list[dict]) -> list[ExtractionResult]:
                 reporter=b.get("reporter"),
                 source_message_id=last_msg.get("message_id"),
                 source_chat_id=last_msg.get("chat_id"),
+                metadata=metadata_list[-1] if metadata_list else None,
             ))
 
         return [er]
