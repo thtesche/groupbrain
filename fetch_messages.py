@@ -97,7 +97,12 @@ def fetch_messages_from_telegram(limit: int = 100, offset: int = 0) -> None:
         user_name = username_map.get(sender_id_str, "")
         
         conn.execute(
-            "INSERT OR IGNORE INTO messages (chat_id, message_id, user_id, user_name, source, text, is_bot_reply, metadata) VALUES (?, ?, ?, ?, 'telegram', ?, 0, ?)",
+            """INSERT INTO messages (chat_id, message_id, user_id, user_name, source, text, is_bot_reply, metadata)
+               VALUES (?, ?, ?, ?, 'telegram', ?, 0, ?)
+               ON CONFLICT(chat_id, message_id, source) DO UPDATE SET
+                   user_name = excluded.user_name,
+                   text = excluded.text,
+                   metadata = excluded.metadata""",
             (str(GROUP_CHAT_ID), msg["message_id"], sender_id_str, user_name, msg["text"], metadata_json),
         )
     
