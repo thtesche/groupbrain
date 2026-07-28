@@ -58,29 +58,43 @@ def generate_digest(days: int = 7) -> str:
         lines.append("**✅ ENTSCHEIDUNGEN:**")
         for d in result.decisions:
             author_str = f" (@{d.author})" if d.author else ""
-            line = f" - **{d.topic}**: {d.decision}{author_str}"
+            line = f" - {d.topic}: {d.decision}{author_str}"
             if d.rationale:
                 line += f"\n    Reason: {d.rationale}"
             lines.append(line)
         lines.append("")
 
-    # Tasks section (no status filtering since we don't store status from LLM)
+    # Tasks section - split into active and completed
     if result.tasks:
-        lines.append("**📌 TASKS:**")
-        for t in result.tasks:
-            author_str = f" (@{t.author})" if t.author else ""
-            line = f"  📋 {t.title}{author_str}"
-            if t.notes:
-                line += f"\n    Note: {t.notes}"
-            lines.append(line)
-        lines.append("")
+        active = [t for t in result.tasks if not (t.notes and ("erledigt" in t.notes.lower() or "completed" in t.notes.lower()))]
+        completed = [t for t in result.tasks if t.notes and ("erledigt" in t.notes.lower() or "completed" in t.notes.lower())]
+
+        if active:
+            lines.append("**📌 TASKS:**")
+            for t in active:
+                author_str = f" (@{t.author})" if t.author else ""
+                line = f" - {t.title}{author_str}"
+                if t.notes:
+                    line += f"\n    Note: {t.notes}"
+                lines.append(line)
+            lines.append("")
+
+        if completed:
+            lines.append("**✅ ERLEDIGTE TASKS:**")
+            for t in completed:
+                author_str = f" (@{t.author})" if t.author else ""
+                line = f" - {t.title}{author_str}"
+                if t.notes:
+                    line += f"\n    Note: {t.notes}"
+                lines.append(line)
+            lines.append("")
 
     # Blockers
     if result.blockers:
         lines.append("**🚧 BLOCKER:**")
         for b in result.blockers:
             reporter_str = f" (gemeldet von @{b.reporter})" if b.reporter else ""
-            lines.append(f"  🔴 {b.title}{reporter_str}")
+            lines.append(f" - {b.title}{reporter_str}")
         lines.append("")
 
     # No activity
@@ -89,13 +103,3 @@ def generate_digest(days: int = 7) -> str:
 
     return "\n".join(lines)
 
-
-def save_digest(content: str, chat_id: str) -> None:
-    """Save digest to database."""
-    conn = get_db()
-    conn.execute(
-        "INSERT INTO digests (content, chat_id, posted_at) VALUES (?, ?, ?)",
-        (content, chat_id, datetime.now().isoformat())
-    )
-    conn.commit()
-    conn.close()

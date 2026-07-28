@@ -1,5 +1,5 @@
 """
-SQLite storage for groupbrain tasks, decisions, and blockers.
+SQLite storage for groupbrain messages.
 """
 import sqlite3
 import os
@@ -36,54 +36,6 @@ def _init_tables(conn: sqlite3.Connection) -> None:
             UNIQUE(chat_id, message_id, source)
         );
 
-        CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            status TEXT DEFAULT 'open',  -- open | in_progress | done | cancelled
-            author TEXT,
-            source_message_id INTEGER,
-            source_chat_id TEXT,
-            source TEXT DEFAULT 'telegram',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            notes TEXT,
-            metadata TEXT,  -- JSON: reactions, reply_to_id, thread_id, forwarded, media, buttons
-            FOREIGN KEY (source_message_id) REFERENCES messages
-        );
-
-        CREATE TABLE IF NOT EXISTS decisions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            topic TEXT NOT NULL,
-            decision TEXT NOT NULL,
-            rationale TEXT,
-            author TEXT,
-            source_message_id INTEGER,
-            source_chat_id TEXT,
-            source TEXT DEFAULT 'telegram',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            metadata TEXT  -- JSON: reactions, reply_to_id, thread_id, forwarded, media, buttons
-        );
-
-        CREATE TABLE IF NOT EXISTS blockers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            status TEXT DEFAULT 'active',  -- active | resolved
-            reporter TEXT,
-            source_message_id INTEGER,
-            source_chat_id TEXT,
-            source TEXT DEFAULT 'telegram',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            resolved_at DATETIME,
-            metadata TEXT  -- JSON: reactions, reply_to_id, thread_id, forwarded, media, buttons
-        );
-
-        CREATE TABLE IF NOT EXISTS digests (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            content TEXT NOT NULL,
-            posted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            chat_id TEXT
-        );
-
         -- FTS5 for full-text search
         CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
             text, user_name, source, chat_id,
@@ -114,23 +66,5 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
     if "metadata" not in columns:
         conn.execute("ALTER TABLE messages ADD COLUMN metadata TEXT")
         print("  🔄 Added 'metadata' column to messages table")
-
-    # Check tasks table for metadata column
-    columns = [col[1] for col in conn.execute("PRAGMA table_info(tasks)").fetchall()]
-    if "metadata" not in columns:
-        conn.execute("ALTER TABLE tasks ADD COLUMN metadata TEXT")
-        print("  🔄 Added 'metadata' column to tasks table")
-
-    # Check decisions table for metadata column
-    columns = [col[1] for col in conn.execute("PRAGMA table_info(decisions)").fetchall()]
-    if "metadata" not in columns:
-        conn.execute("ALTER TABLE decisions ADD COLUMN metadata TEXT")
-        print("  🔄 Added 'metadata' column to decisions table")
-
-    # Check blockers table for metadata column
-    columns = [col[1] for col in conn.execute("PRAGMA table_info(blockers)").fetchall()]
-    if "metadata" not in columns:
-        conn.execute("ALTER TABLE blockers ADD COLUMN metadata TEXT")
-        print("  🔄 Added 'metadata' column to blockers table")
 
     conn.commit()

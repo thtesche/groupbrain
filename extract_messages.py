@@ -69,26 +69,38 @@ def extract_from_db(limit: int = 20) -> None:
     print(f"  {'='*70}\n")
 
     if result.tasks:
-        print(f"  📌 TASKS ({len(result.tasks)}):")
-        for t in result.tasks:
-            author_str = f" (@{t.author})" if t.author else ""
-            completed_marker = " ✅ ERLEDIGT" if t.notes and ("erledigt" in t.notes.lower() or "completed" in t.notes.lower()) else ""
-            print(f"    - {t.title}{author_str}{completed_marker}")
-            if t.notes:
-                print(f"      Note: {t.notes}")
-        print()
+        active = [t for t in result.tasks if not (t.notes and ("erledigt" in t.notes.lower() or "completed" in t.notes.lower()))]
+        completed = [t for t in result.tasks if t.notes and ("erledigt" in t.notes.lower() or "completed" in t.notes.lower())]
+
+        if active:
+            print(f"  📌 TASKS ({len(active)}):")
+            for t in active:
+                author_str = f" (@{t.author})" if t.author else ""
+                print(f"    - {t.title}{author_str}")
+                if t.notes:
+                    print(f"      Note: {t.notes}")
+            print()
+
+        if completed:
+            print(f"  ✅ ERLEDIGTE TASKS ({len(completed)}):")
+            for t in completed:
+                author_str = f" (@{t.author})" if t.author else ""
+                print(f"    - {t.title}{author_str}")
+                if t.notes:
+                    print(f"      Note: {t.notes}")
+            print()
 
     if result.decisions:
-        print(f"  ✅ DECISIONS ({len(result.decisions)}):")
+        print(f"  ENTSCHEIDUNGEN ({len(result.decisions)}):")
         for d in result.decisions:
             author_str = f" (@{d.author})" if d.author else ""
-            print(f"    - **{d.topic}**: {d.decision}{author_str}")
+            print(f"    - {d.topic}: {d.decision}{author_str}")
             if d.rationale:
                 print(f"      Reason: {d.rationale}")
         print()
 
     if result.blockers:
-        print(f"  🚧 BLOCKERS ({len(result.blockers)}):")
+        print(f"  BLOCKER ({len(result.blockers)}):")
         for b in result.blockers:
             reporter_str = f" (@{b.reporter})" if b.reporter else ""
             print(f"    - {b.title}{reporter_str}")

@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
 GroupBrain — Knowledge extraction from Telegram group chats.
-Fetches messages with full metadata (reactions, threads, replies),
-extracts tasks/decisions/blockers via LLM, and generates weekly digests.
+Fetches messages with full metadata (reactions, threads, replies).
 """
 import sys
 from pathlib import Path
@@ -16,8 +15,7 @@ def main():
     print()
     print("Available tools:")
     print("  python fetch_messages.py --limit 100    # Fetch messages from Telegram")
-    print("  python extract_messages.py --limit 50   # Extract tasks/decisions/blockers")
-    print("  python show_db.py [--tasks|--blockers]  # View database content")
+    print("  python show_db.py [--messages]          # View database content")
     print("  python generate_digest_cli.py [--days]  # Generate weekly recap")
     print()
     print("Optional: Telegram authentication (one-time)")

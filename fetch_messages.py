@@ -96,14 +96,18 @@ def fetch_messages_from_telegram(limit: int = 100, offset: int = 0) -> None:
         sender_id_str = str(msg["sender_id"])
         user_name = username_map.get(sender_id_str, "")
         
+        # Use the actual Telegram message date as timestamp
+        msg_date = msg.get("date")
+        
         conn.execute(
-            """INSERT INTO messages (chat_id, message_id, user_id, user_name, source, text, is_bot_reply, metadata)
-               VALUES (?, ?, ?, ?, 'telegram', ?, 0, ?)
+            """INSERT INTO messages (chat_id, message_id, user_id, user_name, source, text, is_bot_reply, metadata, timestamp)
+               VALUES (?, ?, ?, ?, 'telegram', ?, 0, ?, ?)
                ON CONFLICT(chat_id, message_id, source) DO UPDATE SET
                    user_name = excluded.user_name,
                    text = excluded.text,
-                   metadata = excluded.metadata""",
-            (str(GROUP_CHAT_ID), msg["message_id"], sender_id_str, user_name, msg["text"], metadata_json),
+                   metadata = excluded.metadata,
+                   timestamp = excluded.timestamp""",
+            (str(GROUP_CHAT_ID), msg["message_id"], sender_id_str, user_name, msg["text"], metadata_json, msg_date),
         )
     
     conn.commit()
