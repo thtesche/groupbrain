@@ -1,118 +1,90 @@
 """
 Weekly digest generator for groupbrain.
-Gathers tasks, decisions, and blockers, formats as markdown, posts to Telegram.
+Reads messages from SQLite, extracts via LLM, formats as markdown, posts to Telegram.
 """
 import json
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
 from db import get_db
-
-
-def _format_metadata(metadata_str: str) -> str:
-    """Parse metadata JSON and return formatted annotations."""
-    if not metadata_str:
-        return ""
-    try:
-        meta = json.loads(metadata_str)
-    except (json.JSONDecodeError, TypeError):
-        return ""
-
-    annotations = []
-    if meta.get("reactions"):
-        reaction_str = ", ".join(meta["reactions"])
-        annotations.append(f"reactions=[{reaction_str}]")
-    if meta.get("reply_to_id"):
-        annotations.append(f"reply_to={meta['reply_to_id']}")
-    if meta.get("thread_id"):
-        ft = "forum-topic" if meta.get("is_forum_topic") else "thread"
-        annotations.append(f"thread={meta['thread_id']} ({ft})")
-    if meta.get("forwarded"):
-        annotations.append("forwarded")
-    if meta.get("has_media"):
-        annotations.append(f"media={meta.get('media_type', 'media')}")
-    if meta.get("button_count"):
-        annotations.append(f"buttons={meta['button_count']}")
-
-    return " ".join(annotations)
+from extract import extract_from_messages
 
 
 def generate_digest(days: int = 7) -> str:
     """Generate a weekly digest from the last N days."""
     conn = get_db()
-    since = (datetime.now() - timedelta(days=days)).isoformat()
 
-    # Open tasks
-    tasks = conn.execute(
-        "SELECT title, author, status, created_at, metadata FROM tasks WHERE created_at >= ? ORDER BY created_at DESC",
-        (since,)
+    rows = conn.execute(
+        "SELECT id, message_id, user_name, text, chat_id, metadata FROM messages "
+        "WHERE timestamp >= ? "
+        "ORDER BY id DESC LIMIT ?",
+        ((datetime.now() - timedelta(days=days)).isoformat(), 1000),
     ).fetchall()
+    conn.close()
 
-    # Decisions
-    decisions = conn.execute(
-        "SELECT topic, decision, author, created_at, metadata FROM decisions WHERE created_at >= ? ORDER BY created_at DESC",
-        (since,)
-    ).fetchall()
+    if not rows:
+        return f"📊 **Wochen-Recap** ({(datetime.now() - timedelta(days=days)).strftime('%d.%m.')} – {datetime.now().strftime('%d.%m.')})\n\nKeine Nachrichten in den letzten {days} Tagen."
 
-    # Blockers
-    blockers = conn.execute(
-        "SELECT title, reporter, status, created_at, metadata FROM blockers WHERE created_at >= ? ORDER BY created_at DESC",
-        (since,)
-    ).fetchall()
+    # Convert to dict format for extract_from_messages
+    messages = []
+    for row in rows:
+        msg_dict = {
+            "message_id": row[0],
+            "telegram_message_id": row[1],
+            "user_name": row[2],
+            "text": row[3],
+            "chat_id": row[4],
+        }
+        if row[5]:
+            try:
+                msg_dict["metadata"] = json.loads(row[5])
+            except (json.JSONDecodeError, TypeError):
+                msg_dict["metadata"] = None
+        else:
+            msg_dict["metadata"] = None
+        messages.append(msg_dict)
+
+    results = extract_from_messages(messages)
+    if not results:
+        return f"📊 **Wochen-Recap** ({(datetime.now() - timedelta(days=days)).strftime('%d.%m.')} – {datetime.now().strftime('%d.%m.')})\n\nKeine Extraktionsergebnisse (prüfe LLM-Konfiguration)."
+
+    result = results[0]
 
     # Build digest
     lines = [f"📊 **Wochen-Recap** ({(datetime.now() - timedelta(days=days)).strftime('%d.%m.')} – {datetime.now().strftime('%d.%m.')})", ""]
 
     # Decisions section
-    if decisions:
+    if result.decisions:
         lines.append("**✅ ENTSCHEIDUNGEN:**")
-        for d in decisions:
-            meta_str = _format_metadata(d[4])
-            line = f" - {d[1]} ({d[2]}, {d[3][:10]})"
-            if meta_str:
-                line += f" [{meta_str}]"
+        for d in result.decisions:
+            author_str = f" (@{d.author})" if d.author else ""
+            line = f" - **{d.topic}**: {d.decision}{author_str}"
+            if d.rationale:
+                line += f"\n    Reason: {d.rationale}"
             lines.append(line)
         lines.append("")
 
-    # Open tasks section
-    open_tasks = [t for t in tasks if t[2] != "done"]
-    if open_tasks:
-        lines.append("**📌 OFFENE TASKS:**")
-        for t in open_tasks:
-            status_icon = {"open": "🟡", "in_progress": "🔧"}.get(t[2], "📋")
-            meta_str = _format_metadata(t[4])
-            line = f" {status_icon} {t[0]} (@{t[1]})"
-            if meta_str:
-                line += f" [{meta_str}]"
-            lines.append(line)
-        lines.append("")
-
-    # Done tasks (summary)
-    done_tasks = [t for t in tasks if t[2] == "done"]
-    if done_tasks:
-        lines.append("**🎯 ABGESCHLOSSEN:**")
-        for t in done_tasks:
-            meta_str = _format_metadata(t[4])
-            line = f" ✅ {t[0]}"
-            if meta_str:
-                line += f" [{meta_str}]"
+    # Tasks section (no status filtering since we don't store status from LLM)
+    if result.tasks:
+        lines.append("**📌 TASKS:**")
+        for t in result.tasks:
+            author_str = f" (@{t.author})" if t.author else ""
+            line = f"  📋 {t.title}{author_str}"
+            if t.notes:
+                line += f"\n    Note: {t.notes}"
             lines.append(line)
         lines.append("")
 
     # Blockers
-    active_blockers = [b for b in blockers if b[2] == "active"]
-    if active_blockers:
+    if result.blockers:
         lines.append("**🚧 BLOCKER:**")
-        for b in active_blockers:
-            meta_str = _format_metadata(b[4])
-            line = f" 🔴 {b[0]} (gemeldet von @{b[1]})"
-            if meta_str:
-                line += f" [{meta_str}]"
-            lines.append(line)
+        for b in result.blockers:
+            reporter_str = f" (gemeldet von @{b.reporter})" if b.reporter else ""
+            lines.append(f"  🔴 {b.title}{reporter_str}")
         lines.append("")
 
     # No activity
-    if not tasks and not decisions and not blockers:
+    if not result.tasks and not result.decisions and not result.blockers:
         lines.append("Keine Aktivitäten in den letzten {} Tagen.".format(days))
 
     return "\n".join(lines)
