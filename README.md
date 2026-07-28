@@ -60,7 +60,7 @@ Set env vars in `.env`:
 - `LLM_BASE_URL` — LLM server URL (default: http://localhost:1234/v1)
 - `LLM_MODEL` — Model name (optional)
 - `OPENAI_API_KEY` — API key (use "dummy" for local servers)
-- `DB_PATH` — SQLite database path (default: `~/.hermes/data/groupbrain.db`)
+- `DB_PATH` — SQLite database path (default: `data/groupbrain.db`, relativ zum Projektverzeichnis)
 
 ## Files (Core Modules)
 - `read_messages.py` — Telethon user client: fetches messages with full metadata (reactions, threads, replies, forwards, media)

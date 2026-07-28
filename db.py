@@ -6,7 +6,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-DB_PATH = os.getenv("DB_PATH", str(Path.home() / ".hermes" / "data" / "groupbrain.db"))
+DB_PATH = os.getenv("DB_PATH", str(Path(__file__).parent / "data" / "groupbrain.db"))
 
 
 def get_db() -> sqlite3.Connection:

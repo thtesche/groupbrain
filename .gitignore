@@ -11,3 +11,6 @@ venv/
 # Environment variables
 .env
 .DS_Store
+
+# Database (contains real Telegram data, never commit)
+data/groupbrain.db
