@@ -3,7 +3,7 @@
 <!-- Badges -->
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org)
 [![Telethon](https://img.shields.io/badge/Telethon-1.34%2B-1D9BF0?style=for-the-badge&logo=telegram&logoColor=white)](https://github.com/LonamiWebs/Telethon)
-[![License: Private](https://img.shields.io/badge/License-Private-red?style=for-the-badge)]()
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg?style=for-the-badge)](LICENSE)
 [![Standalone](https://img.shields.io/badge/Status-Standalone-brightgreen?style=for-the-badge)]()
 
 ## Purpose
@@ -131,4 +131,5 @@ Manual execution:
 ```
 
 ## License
-Private — for internal team use only.
+
+Distributed under the Apache License, Version 2.0. See [`LICENSE`](LICENSE) for details.
