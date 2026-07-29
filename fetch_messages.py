@@ -25,7 +25,7 @@ load_dotenv(Path(__file__).parent / ".env")
 GROUP_CHAT_ID = os.getenv("GROUP_CHAT_ID")
 
 
-def fetch_messages_from_telegram(limit: int = 100, offset: int = 0) -> None:
+async def fetch_messages_from_telegram(limit: int = 100, offset: int = 0) -> None:
     """Fetch messages from Telegram and store in DB with full metadata."""
     if not GROUP_CHAT_ID:
         print("ERROR: GROUP_CHAT_ID not set in .env")
@@ -34,8 +34,7 @@ def fetch_messages_from_telegram(limit: int = 100, offset: int = 0) -> None:
     print(f"📩 Fetching messages from group: {GROUP_CHAT_ID}")
     print(f"   Limit: {limit}, Offset: {offset}\n")
     
-    # Fetch from Telegram using read_messages.py (async function)
-    messages, username_map = asyncio.run(read_messages(limit=limit, offset=offset))
+    messages, username_map = await read_messages(limit=limit, offset=offset)
     
     print(f"  ✅ Fetched {len(messages)} message(s)\n")
     
@@ -116,6 +115,11 @@ def fetch_messages_from_telegram(limit: int = 100, offset: int = 0) -> None:
     print(f"  ✅ Stored {len(messages)} message(s) in database.\n")
 
 
+def _sync_fetch_messages_from_telegram(limit: int = 100, offset: int = 0) -> None:
+    """CLI wrapper: runs the async fetch in a new event loop."""
+    asyncio.run(fetch_messages_from_telegram(limit=limit, offset=offset))
+
+
 def fetch_messages_list() -> None:
     """Show all stored messages."""
     conn = get_db()
@@ -151,7 +155,7 @@ def main() -> None:
     if args.list:
         fetch_messages_list()
     else:
-        fetch_messages_from_telegram(limit=args.limit, offset=args.offset)
+        _sync_fetch_messages_from_telegram(limit=args.limit, offset=args.offset)
 
 
 if __name__ == "__main__":
