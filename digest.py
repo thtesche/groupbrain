@@ -23,7 +23,7 @@ def generate_digest(days: int = 7) -> str:
     conn.close()
 
     if not rows:
-        return f"📊 **Wochen-Recap** ({(datetime.now() - timedelta(days=days)).strftime('%d.%m.')} – {datetime.now().strftime('%d.%m.')})\n\nKeine Nachrichten in den letzten {days} Tagen."
+        return f"📊 **Weekly Recap** ({(datetime.now() - timedelta(days=days)).strftime('%m.%d.')} – {datetime.now().strftime('%m.%d.')})\n\nNo messages in the last {days} days."
 
     # Convert to dict format for extract_from_messages
     messages = []
@@ -46,16 +46,16 @@ def generate_digest(days: int = 7) -> str:
 
     results = extract_from_messages(messages)
     if not results:
-        return f"📊 **Wochen-Recap** ({(datetime.now() - timedelta(days=days)).strftime('%d.%m.')} – {datetime.now().strftime('%d.%m.')})\n\nKeine Extraktionsergebnisse (prüfe LLM-Konfiguration)."
+        return f"📊 **Weekly Recap** ({(datetime.now() - timedelta(days=days)).strftime('%m.%d.')} – {datetime.now().strftime('%m.%d.')})\n\nNo extraction results (check LLM configuration)."
 
     result = results[0]
 
     # Build digest
-    lines = [f"📊 **Wochen-Recap** ({(datetime.now() - timedelta(days=days)).strftime('%d.%m.')} – {datetime.now().strftime('%d.%m.')})", ""]
+    lines = [f"📊 **Weekly Recap** ({(datetime.now() - timedelta(days=days)).strftime('%m.%d.')} – {datetime.now().strftime('%m.%d.')})", ""]
 
     # Decisions section
     if result.decisions:
-        lines.append("**✅ ENTSCHEIDUNGEN:**")
+        lines.append("**✅ DECISIONS:**")
         for d in result.decisions:
             author_str = f" (@{d.author})" if d.author else ""
             line = f" - {d.topic}: {d.decision}{author_str}"
@@ -66,8 +66,8 @@ def generate_digest(days: int = 7) -> str:
 
     # Tasks section - split into active and completed
     if result.tasks:
-        active = [t for t in result.tasks if not (t.notes and ("erledigt" in t.notes.lower() or "completed" in t.notes.lower()))]
-        completed = [t for t in result.tasks if t.notes and ("erledigt" in t.notes.lower() or "completed" in t.notes.lower())]
+        active = [t for t in result.tasks if not (t.notes and ("erledigt" in t.notes.lower() or "completed" in t.notes.lower() or "done" in t.notes.lower() or "fertig" in t.notes.lower()))]
+        completed = [t for t in result.tasks if t.notes and ("erledigt" in t.notes.lower() or "completed" in t.notes.lower() or "done" in t.notes.lower() or "fertig" in t.notes.lower())]
 
         if active:
             lines.append("**📌 TASKS:**")
@@ -80,7 +80,7 @@ def generate_digest(days: int = 7) -> str:
             lines.append("")
 
         if completed:
-            lines.append("**✅ ERLEDIGTE TASKS:**")
+            lines.append("**✅ COMPLETED TASKS:**")
             for t in completed:
                 author_str = f" (@{t.author})" if t.author else ""
                 line = f" - {t.title}{author_str}"
@@ -91,15 +91,15 @@ def generate_digest(days: int = 7) -> str:
 
     # Blockers
     if result.blockers:
-        lines.append("**🚧 BLOCKER:**")
+        lines.append("**🚧 BLOCKERS:**")
         for b in result.blockers:
-            reporter_str = f" (gemeldet von @{b.reporter})" if b.reporter else ""
+            reporter_str = f" (reported by @{b.reporter})" if b.reporter else ""
             lines.append(f" - {b.title}{reporter_str}")
         lines.append("")
 
     # No activity
     if not result.tasks and not result.decisions and not result.blockers:
-        lines.append("Keine Aktivitäten in den letzten {} Tagen.".format(days))
+        lines.append(f"No activity in the last {days} days.")
 
     return "\n".join(lines)
 

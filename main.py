@@ -17,7 +17,7 @@ from telethon import TelegramClient
 # ── .env loading ───────────────────────────────────────────────────────
 
 def load_env(filepath):
-    """Manuell .env laden."""
+    """Load .env file manually."""
     if os.path.exists(filepath):
         with open(filepath, 'r') as f:
             for line in f:
@@ -73,22 +73,22 @@ async def send_digest_to_telegram(digest_text: str, chat_id: str, api_id: str, a
         await client.connect()
 
         if not await client.is_user_authorized():
-            print("[!] ERROR: Session nicht gültig. Führe 'python telegram_auth_user.py' aus.")
+            print("[!] ERROR: Session invalid. Run 'python telegram_auth_user.py'.")
             return False
 
         chunks = split_digest(digest_text)
 
         if len(chunks) > 1:
-            print(f"[*] Digest auf {len(chunks)} Nachricht(en) aufgeteilt.")
+            print(f"[*] Digest split into {len(chunks)} message(s).")
         else:
-            print("[*] Sende Digest als einzelne Nachricht...")
+            print("[*] Sending digest as single message...")
 
         for i, chunk in enumerate(chunks):
-            prefix = f"*(Teil {i+1}/{len(chunks)})* " if len(chunks) > 1 else ""
+            prefix = f"*(Part {i+1}/{len(chunks)})* " if len(chunks) > 1 else ""
             await client.send_message(int(chat_id), prefix + chunk, parse_mode="markdown")
-            print(f"  ✓ Gesendet: Teil {i+1}/{len(chunks)} ({len(chunk)} Zeichen)")
+            print(f"  ✓ Sent: Part {i+1}/{len(chunks)} ({len(chunk)} chars)")
 
-        print("[+] Digest erfolgreich gesendet.")
+        print("[+] Digest sent successfully.")
         return True
 
     finally:
@@ -120,38 +120,37 @@ async def main():
 
     print("=" * 60)
     print("  GroupBrain Weekly Digest")
-    print(f"  {datetime.now().strftime('%d.%m.%Y %H:%M')}")
+    print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print("=" * 60)
 
     # Step 1: Fetch messages
-    print("\n[*] Schritt 1: Nachrichten abrufen...")
+    print("\n[*] Step 1: Fetching messages...")
     try:
         await fetch_messages_from_telegram(limit=100, offset=0)
     except Exception as e:
-        print(f"[!] Fehler beim Abrufen: {e}")
+        print(f"[!] Error fetching messages: {e}")
         sys.exit(1)
 
     # Step 2: Generate digest
-    print("\n[*] Schritt 2: Digest generieren...")
+    print("\n[*] Step 2: Generating digest...")
     try:
         digest_text = generate_digest(days=days)
     except Exception as e:
-        print(f"[!] Fehler beim Generieren: {e}")
+        print(f"[!] Error generating digest: {e}")
         sys.exit(1)
 
     # Check if there's any content worth sending
-    if "Keine Nachrichten" in digest_text or "Keine Aktivitäten" in digest_text:
-        print("[!] Keine neuen Aktivitäten — Digest übersprungen.")
+    if "No messages" in digest_text or "No activity" in digest_text:
+        print("[!] No new activity — digest skipped.")
         return
 
     # Validate digest has actual content (not just header)
-    header = "📊 **Wochen-Recap**"
-    if digest_text.strip() == f"📊 **Wochen-Recap**" or len(digest_text.split("\n")) <= 2:
-        print("[!] Digest enthält keine sinnvollen Inhalte — übersprungen.")
+    if digest_text.strip().startswith("📊 **Weekly Recap**") and len(digest_text.split("\n")) <= 2:
+        print("[!] Digest contains no meaningful content — skipped.")
         return
 
     # Step 3: Send to Telegram
-    print("\n[*] Schritt 3: Digest an Telegram senden...")
+    print("\n[*] Step 3: Sending digest to Telegram...")
     try:
         success = await send_digest_to_telegram(
             digest_text=digest_text,
@@ -160,14 +159,14 @@ async def main():
             api_hash=TELEGRAM_API_HASH
         )
         if not success:
-            print("[!] Telegram-Delivery fehlgeschlagen.")
+            print("[!] Telegram delivery failed.")
             sys.exit(1)
     except Exception as e:
-        print(f"[!] Fehler beim Senden: {e}")
+        print(f"[!] Error sending digest: {e}")
         sys.exit(1)
 
     print("\n" + "=" * 60)
-    print("  ✓ Weekly Digest abgeschlossen")
+    print("  ✓ Weekly Digest completed")
     print("=" * 60)
 
 

@@ -16,6 +16,9 @@ Telegram Group ←── read_messages.py (Telethon user client)
                     ├── digest.py (Core module: digest generation from SQLite)
                     ├── generate_digest_cli.py (CLI: displays digest)
                     │
+                    ├── main.py (Cron orchestrator: fetch + generate + send to Telegram)
+                    ├── run_weekly.sh (Shell wrapper: venv activation + cron entrypoint)
+                    │
                     ├── show_db.py (SQLite Viewer: messages, tasks, decisions, blockers, digests)
                     └── db.py (SQLite Schema: messages, tasks, decisions, blockers, digests, users, FTS5)
 
@@ -23,8 +26,9 @@ Layers:
   Telethon layer:   read_messages.py (Telegram API, User-Client, no Bot API)
   Core modules:     extract.py (LLM extraction, dataclasses), digest.py (digest generation)
   CLI wrappers:     fetch_messages.py, extract_messages.py, generate_digest_cli.py, show_db.py
+  Orchestrator:     main.py (cron: fetch → generate → send), run_weekly.sh (venv wrapper)
   Storage:          db.py (SQLite schema + migrations)
-  Orchestrator:     groupbrain.py (usage instructions)
+  Config:           groupbrain.py (usage instructions)
 ```
 
 ## Quick Start
@@ -43,6 +47,10 @@ python show_db.py
 
 # 4. Generate weekly recap
 python generate_digest_cli.py
+
+# 5. Run weekly cron (with Telegram delivery)
+./run_weekly.sh                    # 7 days (default)
+./run_weekly.sh --days 14          # 14 days
 ```
 
 ## CLI Tools
@@ -50,6 +58,7 @@ python generate_digest_cli.py
 - `extract_messages.py` — Extract tasks/decisions/blockers via LLM
 - `show_db.py` — View database content (all tables, with metadata annotations)
 - `generate_digest_cli.py` — Generate weekly recap
+- `run_weekly.sh` — Cron wrapper: fetches, generates, and sends digest to Telegram
 
 ## Configuration
 Set env vars in `.env`:
@@ -66,12 +75,14 @@ Set env vars in `.env`:
 - `read_messages.py` — Telethon user client: fetches messages with full metadata (reactions, threads, replies, forwards, media)
 - `extract.py` — Core LLM extraction: sends message batches to OpenAI-compatible API, returns Task/Decision/Blocker dataclasses
 - `digest.py` — Core digest generator: assembles weekly recap from tasks, decisions, blockers in SQLite
+- `main.py` — Cron orchestrator: fetches messages, generates digest, sends to Telegram
 
 ## Files (CLI Wrappers)
 - `fetch_messages.py` — CLI: calls `read_messages.py`, stores messages + username mapping in SQLite
 - `extract_messages.py` — CLI: reads messages from SQLite, calls `extract.py` (LLM), stores Tasks/Decisions/Blockers
 - `generate_digest_cli.py` — CLI: calls `digest.py`, displays weekly recap
 - `show_db.py` — CLI: SQLite Viewer (all tables: messages, tasks, decisions, blockers, digests)
+- `run_weekly.sh` — Shell wrapper: activates venv, runs `main.py` with `--days` argument
 
 ## Files (Auth & Infra)
 - `telegram_auth_user.py` — One-time Telegram authentication via Telethon (creates `groupbrain_session.session`)
@@ -82,6 +93,22 @@ Set env vars in `.env`:
 ## Integration with Hermes
 - Uses `GROUP_CHAT_ID` from Hermes `.env`
 - Cron job for weekly digest (`hermes cronjob`)
+
+## Cron Setup
+Install the weekly cron job:
+```bash
+crontab -e
+# Add:
+0 10 * * 1 /Users/thtesche/VibeCoding/groupbrain/run_weekly.sh >> /Users/thtesche/VibeCoding/groupbrain/logs/cron.log 2>&1
+```
+
+Runs every Monday at 10:00 AM. Logs are written to `logs/cron.log`.
+
+Manual execution:
+```bash
+./run_weekly.sh                    # 7 days (default)
+./run_weekly.sh --days 14          # 14 days
+```
 
 ## License
 Private — for internal team use only.
