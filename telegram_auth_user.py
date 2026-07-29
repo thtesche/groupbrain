@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Einmalige Telegram-Authentifizierung für GroupBrain.
-Erstellt die Session-Datei 'groupbrain_session.session' für den Chat-Historie-Export.
+One-time Telegram authentication for GroupBrain.
+Creates the session file 'groupbrain_session.session' for chat history export.
 
-Nutzung: python telegram_auth_user.py
+Usage: python telegram_auth_user.py
 """
 import os
 import sys
@@ -14,51 +14,51 @@ from dotenv import load_dotenv
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError
 
-# Lade .env aus groupbrain plugin
+# Load .env from project directory
 load_dotenv(Path(__file__).parent / ".env")
 
-# Hole die Zugangsdaten aus den Umgebungsvariablen
+# Get credentials from environment variables
 API_ID = os.getenv("TELEGRAM_API_ID")
 API_HASH = os.getenv("TELEGRAM_API_HASH")
 PHONE = os.getenv("TELEGRAM_PHONE")
 
 if not all([API_ID, API_HASH, PHONE]):
-    print("FEHLER: TELEGRAM_API_ID, TELEGRAM_API_HASH und TELEGRAM_PHONE müssen gesetzt sein.")
+    print("ERROR: TELEGRAM_API_ID, TELEGRAM_API_HASH and TELEGRAM_PHONE must be set.")
     sys.exit(1)
 
 async def auth_once():
-    # Erstellt die Session-Datei 'groupbrain_session.session'
+    # Creates the session file 'groupbrain_session.session'
     client = TelegramClient('groupbrain_session', int(API_ID or "0"), API_HASH or "")
     
-    print("Verbinde mit Telegram...")
+    print("Connecting to Telegram...")
     await client.connect()
 
     if await client.is_user_authorized():
-        print("Du bist bereits authentifiziert! Die .session-Datei ist bereits gültig.")
+        print("You are already authenticated! The .session file is already valid.")
         return
 
-    print(f"Sende Login-Code an {PHONE}...")
+    print(f"Sending login code to {PHONE}...")
     await client.send_code_request(PHONE)
     
-    code = input("Bitte gib den 5-stelligen Code ein (aus der Telegram-App oder per SMS): ")
+    code = input("Please enter the 5-digit code (from the Telegram app or SMS): ")
 
     try:
-        # Versuche den Login nur mit dem Code
+        # Attempt login with code only
         await client.sign_in(PHONE, code)
-        print("Erfolgreich eingeloggt (Ohne 2FA)!")
+        print("Logged in successfully (without 2FA)!")
         
     except SessionPasswordNeededError:
-        # Dieser Block wird ausgeführt, wenn 2FA aktiviert ist
-        print("\nSchritt 2: 2-Faktor-Authentifizierung (2FA) ist aktiviert.")
-        password = getpass.getpass("Bitte gib dein Cloud-Passwort ein (Eingabe bleibt unsichtbar): ")
+        # This block executes if 2FA is enabled
+        print("\nStep 2: Two-factor authentication (2FA) is enabled.")
+        password = getpass.getpass("Please enter your cloud password (input is hidden): ")
         
         await client.sign_in(password=password)
-        print("Erfolgreich mit 2FA eingeloggt!")
+        print("Logged in successfully with 2FA!")
 
-    print("\n✅ Authentifizierung abgeschlossen!")
-    print("Die Datei 'groupbrain_session.session' wurde in diesem Ordner erstellt.")
-    print("Du kannst diese Datei nun auf deinen Server kopieren. Dein Hauptskript wird danach keine Eingaben mehr verlangen.")
+    print("\n✅ Authentication complete!")
+    print("The file 'groupbrain_session.session' has been created in this directory.")
+    print("You can copy this file to your server. Your main script will not require further input.")
 
 if __name__ == '__main__':
-    # Startet die asynchrone Funktion
+    # Start the async function
     asyncio.run(auth_once())

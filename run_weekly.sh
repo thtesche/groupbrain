@@ -6,8 +6,16 @@
 # Usage:
 #   ./run_weekly.sh                    # 7 days (default)
 #   ./run_weekly.sh --days 14          # 14 days
+#
+# Environment variables (override defaults):
+#   GROUPBRAIN_PROJECT_ROOT  — Absolute path to project directory (default: script location)
+#   GROUPBRAIN_ENV_PATH      — Absolute path to .env file (default: $PROJECT_ROOT/.env)
+#   GROUPBRAIN_DB_PATH       — Override DB_PATH for this run
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Allow overriding project root via environment variable
+PROJECT_ROOT="${GROUPBRAIN_PROJECT_ROOT:-$SCRIPT_DIR}"
 
 # Parse --days argument
 DAYS=7
@@ -21,13 +29,15 @@ if [ "$1" = "--days" ]; then
 fi
 
 # Load .env if present
-if [ -f "$SCRIPT_DIR/.env" ]; then
+ENV_PATH="${GROUPBRAIN_ENV_PATH:-$PROJECT_ROOT/.env}"
+if [ -f "$ENV_PATH" ]; then
     set -a
-    source "$SCRIPT_DIR/.env"
+    source "$ENV_PATH"
     set +a
+else
+    echo "[!] Warning: .env file not found at $ENV_PATH"
 fi
 
-PROJECT_ROOT="$SCRIPT_DIR"
 VENV_PATH="$PROJECT_ROOT/venv"
 
 # Validate venv exists
@@ -41,6 +51,11 @@ PYTHON_EXE="$VENV_PATH/bin/python3"
 # Clear PYTHONPATH then set to project root only
 export PYTHONPATH=""
 export PYTHONPATH="$PROJECT_ROOT"
+
+# Allow overriding DB_PATH via environment variable
+if [ -n "$GROUPBRAIN_DB_PATH" ]; then
+    export DB_PATH="$GROUPBRAIN_DB_PATH"
+fi
 
 # Pass --days to main.py
 "$PYTHON_EXE" "$PROJECT_ROOT/main.py" --days "$DAYS"

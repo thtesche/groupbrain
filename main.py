@@ -12,7 +12,6 @@ import sys
 import asyncio
 from datetime import datetime
 from pathlib import Path
-from telethon import TelegramClient
 
 # ── .env loading ───────────────────────────────────────────────────────
 
@@ -33,67 +32,7 @@ def load_env(filepath):
 sys.path.insert(0, str(Path(__file__).parent))
 from fetch_messages import fetch_messages_from_telegram
 from digest import generate_digest
-
-# ── Telegram send logic ──────────────────────────────────────────────
-
-TELEGRAM_MAX_LENGTH = 4000
-
-
-def split_digest(text: str, max_len: int = TELEGRAM_MAX_LENGTH) -> list[str]:
-    """Split markdown digest into chunks that fit Telegram's 4096 limit."""
-    chunks = []
-    current = ""
-
-    for paragraph in text.split("\n\n"):
-        if current and len(current) + 2 + len(paragraph) > max_len:
-            chunks.append(current)
-            current = paragraph
-        elif len(paragraph) > max_len:
-            while len(paragraph) > max_len:
-                split_at = paragraph.rfind(" ", 0, max_len)
-                if split_at == -1:
-                    split_at = max_len
-                chunks.append(paragraph[:split_at])
-                paragraph = paragraph[split_at:].lstrip()
-            current = paragraph if paragraph else ""
-        else:
-            current = current + "\n\n" + paragraph if current else paragraph
-
-    if current:
-        chunks.append(current)
-
-    return chunks
-
-
-async def send_digest_to_telegram(digest_text: str, chat_id: str, api_id: str, api_hash: str) -> bool:
-    """Send digest to Telegram group, splitting into chunks if necessary."""
-    client = TelegramClient('groupbrain_session', int(api_id), api_hash)
-
-    try:
-        await client.connect()
-
-        if not await client.is_user_authorized():
-            print("[!] ERROR: Session invalid. Run 'python telegram_auth_user.py'.")
-            return False
-
-        chunks = split_digest(digest_text)
-
-        if len(chunks) > 1:
-            print(f"[*] Digest split into {len(chunks)} message(s).")
-        else:
-            print("[*] Sending digest as single message...")
-
-        for i, chunk in enumerate(chunks):
-            prefix = f"*(Part {i+1}/{len(chunks)})* " if len(chunks) > 1 else ""
-            await client.send_message(int(chat_id), prefix + chunk, parse_mode="markdown")
-            print(f"  ✓ Sent: Part {i+1}/{len(chunks)} ({len(chunk)} chars)")
-
-        print("[+] Digest sent successfully.")
-        return True
-
-    finally:
-        await client.disconnect()
-
+from telegram_client import send_digest_to_telegram, check_session_health
 
 # ── Main orchestrator ────────────────────────────────────────────────
 
@@ -122,6 +61,19 @@ async def main():
     print("  GroupBrain Weekly Digest")
     print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print("=" * 60)
+
+    # Step 0: Health check - validate Telegram session before running pipeline
+    print("\n[*] Step 0: Checking Telegram session health...")
+    try:
+        is_valid, message = await check_session_health(TELEGRAM_API_ID, TELEGRAM_API_HASH)
+        if not is_valid:
+            print(f"[!] Session check failed: {message}")
+            print("[!] Skipping digest — Telegram delivery not possible.")
+            sys.exit(1)
+        print(f"  ✓ {message}")
+    except Exception as e:
+        print(f"[!] Unexpected error during session check: {e}")
+        sys.exit(1)
 
     # Step 1: Fetch messages
     print("\n[*] Step 1: Fetching messages...")

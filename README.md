@@ -1,5 +1,11 @@
 # groupbrain
 
+<!-- Badges -->
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org)
+[![Telethon](https://img.shields.io/badge/Telethon-1.34%2B-1D9BF0?style=for-the-badge&logo=telegram&logoColor=white)](https://github.com/LonamiWebs/Telethon)
+[![License: Private](https://img.shields.io/badge/License-Private-red?style=for-the-badge)]()
+[![Standalone](https://img.shields.io/badge/Status-Standalone-brightgreen?style=for-the-badge)]()
+
 ## Purpose
 Passive knowledge extraction from Telegram group chats. Uses Telethon to fetch real messages with full metadata (reactions, threads, replies), extracts tasks/decisions/blockers via LLM, and generates weekly digests.
 
@@ -15,6 +21,8 @@ Telegram Group ←── read_messages.py (Telethon user client)
                     │
                     ├── digest.py (Core module: digest generation from SQLite)
                     ├── generate_digest_cli.py (CLI: displays digest)
+                    │
+                    ├── telegram_client.py (Telegram API client: send digest, split messages)
                     │
                     ├── main.py (Cron orchestrator: fetch + generate + send to Telegram)
                     ├── run_weekly.sh (Shell wrapper: venv activation + cron entrypoint)
@@ -33,7 +41,7 @@ Layers:
 
 ## Quick Start
 ```bash
-cd ~/.hermes/plugins/groupbrain
+cd /path/to/groupbrain
 source venv/bin/activate
 
 # 1. Fetch messages from Telegram (with metadata)
@@ -53,6 +61,21 @@ python generate_digest_cli.py
 ./run_weekly.sh --days 14          # 14 days
 ```
 
+## Standalone Setup
+GroupBrain runs independently — no external dependencies required.
+
+```bash
+# Create virtual environment
+python -m venv venv && source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Create .env from example
+cp .env.example .env
+# Edit .env with your credentials
+```
+
 ## CLI Tools
 - `fetch_messages.py` — Fetch messages from Telegram with full metadata (reactions, threads, replies)
 - `extract_messages.py` — Extract tasks/decisions/blockers via LLM
@@ -69,12 +92,13 @@ Set env vars in `.env`:
 - `LLM_BASE_URL` — LLM server URL (default: http://localhost:1234/v1)
 - `LLM_MODEL` — Model name (optional)
 - `OPENAI_API_KEY` — API key (use "dummy" for local servers)
-- `DB_PATH` — SQLite database path (default: `data/groupbrain.db`, relativ zum Projektverzeichnis)
+- `DB_PATH` — SQLite database path (default: `data/groupbrain.db` relative to project root)
 
 ## Files (Core Modules)
 - `read_messages.py` — Telethon user client: fetches messages with full metadata (reactions, threads, replies, forwards, media)
 - `extract.py` — Core LLM extraction: sends message batches to OpenAI-compatible API, returns Task/Decision/Blocker dataclasses
 - `digest.py` — Core digest generator: assembles weekly recap from tasks, decisions, blockers in SQLite
+- `telegram_client.py` — Telegram API client: sends digest messages, handles session validation
 - `main.py` — Cron orchestrator: fetches messages, generates digest, sends to Telegram
 
 ## Files (CLI Wrappers)
@@ -90,16 +114,12 @@ Set env vars in `.env`:
 - `db.py` — SQLite schema: messages, tasks, decisions, blockers, digests, users, FTS5 full-text search, schema migrations
 - `requirements.txt` — Python dependencies
 
-## Integration with Hermes
-- Uses `GROUP_CHAT_ID` from Hermes `.env`
-- Cron job for weekly digest (`hermes cronjob`)
-
 ## Cron Setup
 Install the weekly cron job:
 ```bash
 crontab -e
 # Add:
-0 10 * * 1 /Users/thtesche/VibeCoding/groupbrain/run_weekly.sh >> /Users/thtesche/VibeCoding/groupbrain/logs/cron.log 2>&1
+0 10 * * 1 /path/to/groupbrain/run_weekly.sh >> /path/to/groupbrain/logs/cron.log 2>&1
 ```
 
 Runs every Monday at 10:00 AM. Logs are written to `logs/cron.log`.
