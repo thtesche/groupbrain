@@ -23,6 +23,7 @@ def extract_from_db(limit: int = 20) -> None:
 
     rows = conn.execute(
         "SELECT id, message_id, user_name, text, chat_id, metadata FROM messages "
+        "WHERE text NOT LIKE '📊 **Weekly Recap** %' "
         "ORDER BY id DESC LIMIT ?",
         (limit,),
     ).fetchall()

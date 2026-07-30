@@ -16,7 +16,7 @@ def generate_digest(days: int = 7) -> str:
 
     rows = conn.execute(
         "SELECT id, message_id, user_name, text, chat_id, metadata FROM messages "
-        "WHERE timestamp >= ? "
+        "WHERE timestamp >= ? AND text NOT LIKE '📊 **Weekly Recap** %' "
         "ORDER BY id DESC LIMIT ?",
         ((datetime.now() - timedelta(days=days)).isoformat(), 1000),
     ).fetchall()
