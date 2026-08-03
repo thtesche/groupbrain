@@ -142,8 +142,10 @@ def extract_from_messages(messages: list[dict]) -> list[ExtractionResult]:
 
     try:
         base_url, model = _get_llm_config()
-        # Lokale Server (LM Studio, Ollama etc.) brauchen trotzdem einen api_key
-        api_key = os.getenv("OPENAI_API_KEY") or ""
+        api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_ADMIN_KEY") or ""
+        # LM Studio (and similar local servers) accept any non-empty string
+        if not api_key:
+            api_key = "sk-fake-key"  # dummy key accepted by LM Studio / local servers
         client = OpenAI(base_url=base_url, api_key=api_key)
 
         response = client.chat.completions.create(

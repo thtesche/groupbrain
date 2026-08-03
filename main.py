@@ -37,12 +37,16 @@ from telegram_client import send_digest_to_telegram, check_session_health
 # ── Main orchestrator ────────────────────────────────────────────────
 
 async def main():
-    # Parse --days argument
+    # Parse --days and --silent (dry-run) arguments
     days = 7
-    if "--days" in sys.argv:
-        idx = sys.argv.index("--days")
-        if idx + 1 < len(sys.argv):
-            days = int(sys.argv[idx + 1])
+    silent = False
+    args = sys.argv[1:]
+    if "--silent" in args:
+        silent = True
+    if "--days" in args:
+        idx = args.index("--days")
+        if idx + 1 < len(args):
+            days = int(args[idx + 1])
 
     # Load .env
     env_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -101,25 +105,48 @@ async def main():
         print("[!] Digest contains no meaningful content — skipped.")
         return
 
-    # Step 3: Send to Telegram
-    print("\n[*] Step 3: Sending digest to Telegram...")
-    try:
-        success = await send_digest_to_telegram(
-            digest_text=digest_text,
-            chat_id=GROUP_CHAT_ID,
-            api_id=TELEGRAM_API_ID,
-            api_hash=TELEGRAM_API_HASH
-        )
-        if not success:
-            print("[!] Telegram delivery failed.")
-            sys.exit(1)
-    except Exception as e:
-        print(f"[!] Error sending digest: {e}")
-        sys.exit(1)
+    # Handle LLM extraction failure
+    if "No extraction results" in digest_text:
+        print("[!] LLM extraction returned no results — check LLM configuration.")
+        if silent:
+            print("\n" + "=" * 60)
+            print("  DIGEST (would be sent to Telegram):")
+            print("=" * 60)
+            print(digest_text)
+            print("=" * 60)
+            print("  ✓ Weekly Digest completed (dry-run)")
+            print("=" * 60)
+        return
 
-    print("\n" + "=" * 60)
-    print("  ✓ Weekly Digest completed")
-    print("=" * 60)
+    # Step 3: Send to Telegram
+    if silent:
+        print("\n[*] Step 3: Silent mode — skipping Telegram delivery.")
+        print("\n" + "=" * 60)
+        print("  DIGEST (would be sent to Telegram):")
+        print("=" * 60)
+        print(digest_text)
+        print("=" * 60)
+        print("  ✓ Weekly Digest completed (dry-run)")
+        print("=" * 60)
+    else:
+        print("\n[*] Step 3: Sending digest to Telegram...")
+        try:
+            success = await send_digest_to_telegram(
+                digest_text=digest_text,
+                chat_id=GROUP_CHAT_ID,
+                api_id=TELEGRAM_API_ID,
+                api_hash=TELEGRAM_API_HASH
+            )
+            if not success:
+                print("[!] Telegram delivery failed.")
+                sys.exit(1)
+        except Exception as e:
+            print(f"[!] Error sending digest: {e}")
+            sys.exit(1)
+
+        print("\n" + "=" * 60)
+        print("  ✓ Weekly Digest completed")
+        print("=" * 60)
 
 
 if __name__ == '__main__':

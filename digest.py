@@ -23,7 +23,7 @@ def generate_digest(days: int = 7) -> str:
     conn.close()
 
     if not rows:
-        return f"📊 **Weekly Recap** ({(datetime.now() - timedelta(days=days)).strftime('%m.%d.')} – {datetime.now().strftime('%m.%d.')})\n\nNo messages in the last {days} days."
+        return f"📊 **Weekly Recap** ({(datetime.now() - timedelta(days=days)).strftime('%d.%m.')}) – {datetime.now().strftime('%d.%m.')}\n\nNo messages in the last {days} days."
 
     # Convert to dict format for extract_from_messages
     messages = []
@@ -46,12 +46,12 @@ def generate_digest(days: int = 7) -> str:
 
     results = extract_from_messages(messages)
     if not results:
-        return f"📊 **Weekly Recap** ({(datetime.now() - timedelta(days=days)).strftime('%m.%d.')} – {datetime.now().strftime('%m.%d.')})\n\nNo extraction results (check LLM configuration)."
+        return f"📊 **Weekly Recap** ({(datetime.now() - timedelta(days=days)).strftime('%d.%m.')}) – {datetime.now().strftime('%d.%m.')}\n\nNo extraction results (check LLM configuration)."
 
     result = results[0]
 
     # Build digest
-    lines = [f"📊 **Weekly Recap** ({(datetime.now() - timedelta(days=days)).strftime('%m.%d.')} – {datetime.now().strftime('%m.%d.')})", ""]
+    lines = [f"📊 **Weekly Recap** ({(datetime.now() - timedelta(days=days)).strftime('%d.%m.')}) – {datetime.now().strftime('%d.%m.')})", ""]
 
     # Decisions section
     if result.decisions:

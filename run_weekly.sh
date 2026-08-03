@@ -6,6 +6,8 @@
 # Usage:
 #   ./run_weekly.sh                    # 7 days (default)
 #   ./run_weekly.sh --days 14          # 14 days
+#   ./run_weekly.sh --silent           # dry-run, no Telegram message
+#   ./run_weekly.sh --silent --days 14 # dry-run with 14 days
 #
 # Environment variables (override defaults):
 #   GROUPBRAIN_PROJECT_ROOT  — Absolute path to project directory (default: script location)
@@ -17,16 +19,30 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Allow overriding project root via environment variable
 PROJECT_ROOT="${GROUPBRAIN_PROJECT_ROOT:-$SCRIPT_DIR}"
 
-# Parse --days argument
+# Parse arguments
 DAYS=7
-if [ "$1" = "--days" ]; then
-    if [ -n "$2" ] && [[ "$2" =~ ^[0-9]+$ ]]; then
-        DAYS="$2"
-    else
-        echo "[ERROR] --days requires a positive integer argument"
-        exit 1
-    fi
-fi
+SILENT=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --days)
+            if [ -n "$2" ] && [[ "$2" =~ ^[0-9]+$ ]]; then
+                DAYS="$2"
+                shift 2
+            else
+                echo "[ERROR] --days requires a positive integer argument"
+                exit 1
+            fi
+            ;;
+        --silent)
+            SILENT=1
+            shift
+            ;;
+        *)
+            echo "[ERROR] Unknown argument: $1"
+            exit 1
+            ;;
+    esac
+done
 
 # Load .env if present
 ENV_PATH="${GROUPBRAIN_ENV_PATH:-$PROJECT_ROOT/.env}"
@@ -57,5 +73,10 @@ if [ -n "$GROUPBRAIN_DB_PATH" ]; then
     export DB_PATH="$GROUPBRAIN_DB_PATH"
 fi
 
-# Pass --days to main.py
-"$PYTHON_EXE" "$PROJECT_ROOT/main.py" --days "$DAYS"
+# Build command arguments
+CMD=("$PYTHON_EXE" "$PROJECT_ROOT/main.py" --days "$DAYS")
+if [ "$SILENT" -eq 1 ]; then
+    CMD+=("--silent")
+fi
+
+"${CMD[@]}"
